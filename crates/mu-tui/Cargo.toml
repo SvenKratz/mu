@@ -1,0 +1,21 @@
+[package]
+name = "mu-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+crossterm.workspace = true
+mu-agent = { path = "../mu-agent" }
+mu-ai = { path = "../mu-ai" }
+ratatui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true
+

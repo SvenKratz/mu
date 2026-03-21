@@ -1,0 +1,33 @@
+# Rust build artifacts
+/target
+debug/
+*.d
+*.rlib
+*.dylib
+*.so
+*.dll
+*.pdb
+
+# Cargo
+# Keep Cargo.lock for binaries, remove this line if this is a library
+# Cargo.lock
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project-specific
+/.mu-test-home
+references/
+
+test-kanban/
+kanban-board/
+_kanban-board/

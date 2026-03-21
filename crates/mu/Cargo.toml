@@ -1,0 +1,31 @@
+[package]
+name = "mu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+dirs.workspace = true
+futures.workspace = true
+mu-agent = { path = "../mu-agent" }
+mu-ai = { path = "../mu-ai" }
+mu-kanban-ui = { path = "../mu-kanban-ui" }
+mu-tui = { path = "../mu-tui" }
+ratatui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true
