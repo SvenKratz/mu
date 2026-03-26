@@ -31,3 +31,5 @@ references/
 test-kanban/
 kanban-board/
 _kanban-board/
+
+.env

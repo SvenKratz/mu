@@ -50,13 +50,16 @@ impl KanbanState {
     pub fn save(&self) -> Result<(), MuAgentError> {
         let state_path = Self::state_path(&self.root);
         let content = serde_json::to_string_pretty(self)?;
-        std::fs::write(state_path, content)?;
+        std::fs::write(&state_path, content)
+            .map_err(|e| MuAgentError::io_path(e, state_path.display()))?;
         Ok(())
     }
 
     pub fn ensure_folders(&self) -> Result<(), MuAgentError> {
         for folder in KANBAN_FOLDERS {
-            std::fs::create_dir_all(self.root.join(folder))?;
+            let path = self.root.join(folder);
+            std::fs::create_dir_all(&path)
+                .map_err(|e| MuAgentError::io_path(e, path.display()))?;
         }
         Ok(())
     }

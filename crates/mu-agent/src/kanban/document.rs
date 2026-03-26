@@ -37,7 +37,8 @@ impl DocumentState {
                 | (Self::Processing, Self::Complete)
                 | (Self::Processing, Self::Feedback)
                 | (Self::Processing, Self::Error)
-                | (Self::Processing, Self::Draft) // cancel in-progress
+                | (Self::Processing, Self::Todo) // cancel back to queue
+                | (Self::Processing, Self::Draft) // cancel to draft for revision
                 | (Self::Feedback, Self::Processing)
                 | (Self::Complete, Self::Refining)
                 | (Self::Refining, Self::Processing)

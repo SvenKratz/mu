@@ -15,10 +15,15 @@ pub struct KanbanLogger {
 
 impl KanbanLogger {
     pub fn new(log_path: PathBuf) -> Result<Self, MuAgentError> {
+        if let Some(parent) = log_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| MuAgentError::io_path(e, parent.display()))?;
+        }
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(log_path)?;
+            .open(&log_path)
+            .map_err(|e| MuAgentError::io_path(e, log_path.display()))?;
         Ok(Self { file })
     }
 
@@ -76,6 +81,10 @@ impl KanbanLogger {
                     entry["message"] = json!(format!("error: {message}"));
                 }
             }
+            KanbanEvent::StatusResponse { documents } => {
+                entry["event"] = json!("status_response");
+                entry["message"] = json!(format!("status: {} documents", documents.len()));
+            }
         }
 
         let _ = writeln!(self.file, "{}", entry);
@@ -109,6 +118,12 @@ impl KanbanLogger {
             }
             KanbanCommand::ReloadState => {
                 entry["message"] = json!("cmd: reload state");
+            }
+            KanbanCommand::RetryAllErrored => {
+                entry["message"] = json!("cmd: retry all errored");
+            }
+            KanbanCommand::RequestStatus => {
+                entry["message"] = json!("cmd: request status");
             }
         }
 

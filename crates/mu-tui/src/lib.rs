@@ -209,6 +209,12 @@ impl RenderedMessage {
     }
 }
 
+const SLASH_COMMANDS: &[&str] = &[
+    "compact", "exit", "kanban", "kui", "model", "new", "quit", "resume", "session", "tree",
+];
+
+const SLASH_SUBCOMMANDS: &[&str] = &["kanban retry", "kanban status", "kanban stop"];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SlashCommand {
     Model(Option<String>),
@@ -256,7 +262,7 @@ pub fn parse_slash_command(input: &str) -> Option<SlashCommand> {
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "kanban-board".to_string()),
         ),
-        "kanban-ui" => SlashCommand::KanbanUi(
+        "kui" | "kanban-ui" => SlashCommand::KanbanUi(
             remainder
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "kanban-board".to_string()),
@@ -305,6 +311,25 @@ impl App {
 
     pub fn close_overlay(&mut self) {
         self.overlay = None;
+    }
+
+    fn slash_suggestion(&self) -> Option<&'static str> {
+        let partial = self.input.strip_prefix('/')?;
+        if partial.is_empty() {
+            return None;
+        }
+        if partial.contains(char::is_whitespace) {
+            // After a space, match sub-commands (e.g. "kanban r" → "kanban retry")
+            SLASH_SUBCOMMANDS
+                .iter()
+                .find(|cmd| cmd.starts_with(partial) && cmd.len() > partial.len())
+                .copied()
+        } else {
+            SLASH_COMMANDS
+                .iter()
+                .find(|cmd| cmd.starts_with(partial) && cmd.len() > partial.len())
+                .copied()
+        }
     }
 
     pub fn submit(&mut self) -> AppAction {
@@ -358,6 +383,12 @@ impl App {
         }
 
         match key.code {
+            KeyCode::Tab | KeyCode::Right => {
+                if let Some(cmd) = self.slash_suggestion() {
+                    self.input = format!("/{cmd} ");
+                }
+                None
+            }
             KeyCode::Char(character) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.input.push(character);
                 None
@@ -495,7 +526,7 @@ impl App {
 
         // Input prompt with cwd prefix
         let prompt = format!("{} > ", self.footer.cwd);
-        let input_line = Line::from(vec![
+        let mut input_spans = vec![
             Span::styled(
                 prompt,
                 Style::default()
@@ -503,7 +534,12 @@ impl App {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(self.input.clone()),
-        ]);
+        ];
+        if let Some(cmd) = self.slash_suggestion() {
+            let suffix = &cmd[self.input.len() - 1..]; // skip the leading '/'
+            input_spans.push(Span::styled(suffix, Style::default().fg(Color::DarkGray)));
+        }
+        let input_line = Line::from(input_spans);
         let input = Paragraph::new(input_line)
             .block(
                 Block::default()
@@ -712,6 +748,81 @@ mod tests {
             }))
         );
         assert!(app.overlay.is_none());
+    }
+
+    #[test]
+    fn slash_suggestion_matches_prefix() {
+        let mut app = app();
+        app.input = "/mo".to_string();
+        assert_eq!(app.slash_suggestion(), Some("model"));
+    }
+
+    #[test]
+    fn slash_suggestion_none_for_exact_match() {
+        let mut app = app();
+        app.input = "/quit".to_string();
+        assert_eq!(app.slash_suggestion(), None);
+    }
+
+    #[test]
+    fn slash_suggestion_none_for_non_slash() {
+        let mut app = app();
+        app.input = "hello".to_string();
+        assert_eq!(app.slash_suggestion(), None);
+    }
+
+    #[test]
+    fn tab_completes_slash_command() {
+        let mut app = app();
+        app.input = "/mo".to_string();
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.input, "/model ");
+    }
+
+    #[test]
+    fn right_arrow_completes_slash_command() {
+        let mut app = app();
+        app.input = "/re".to_string();
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.input, "/resume ");
+    }
+
+    #[test]
+    fn tab_noop_without_suggestion() {
+        let mut app = app();
+        app.input = "hello".to_string();
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.input, "hello");
+    }
+
+    #[test]
+    fn slash_suggestion_picks_first_alphabetical_match() {
+        let mut app = app();
+        app.input = "/k".to_string();
+        // "kanban" comes before "kui" alphabetically in the sorted list
+        assert_eq!(app.slash_suggestion(), Some("kanban"));
+    }
+
+    #[test]
+    fn slash_suggestion_subcommand_after_space() {
+        let mut app = app();
+        app.input = "/kanban r".to_string();
+        assert_eq!(app.slash_suggestion(), Some("kanban retry"));
+    }
+
+    #[test]
+    fn tab_completes_subcommand() {
+        let mut app = app();
+        app.input = "/kanban st".to_string();
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(app.input, "/kanban status ");
+    }
+
+    #[test]
+    fn no_suggestion_for_arbitrary_arg() {
+        let mut app = app();
+        app.input = "/kanban my-board".to_string();
+        assert_eq!(app.slash_suggestion(), None);
     }
 
     #[test]

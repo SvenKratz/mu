@@ -1,11 +1,12 @@
 #![allow(missing_docs)]
 #![allow(unused_crate_dependencies)]
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
@@ -15,6 +16,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use mu_agent::instructions::{load_instruction_files, render_instruction_text};
+use mu_agent::kanban::state::KanbanState;
 use mu_agent::kanban::KanbanRunner;
 use mu_agent::{
     default_tools, list_session_files, Agent, AgentConfig, KanbanCommand, KanbanEvent, QueueMode,
@@ -47,6 +49,8 @@ pub struct Cli {
     pub session: Option<String>,
     #[arg(long)]
     pub kanban: Option<String>,
+    #[arg(long, help = "Run kanban board headless with API server and structured logging")]
+    pub headless: Option<String>,
     #[arg()]
     pub prompts: Vec<String>,
 }
@@ -196,6 +200,10 @@ pub async fn run_with_cli(cli: Cli) -> Result<()> {
     let runtime = build_runtime()?;
     let mut current_model = runtime.resolve_model(None, None)?;
 
+    if let Some(ref dir) = cli.headless {
+        return run_headless(&runtime, current_model, dir).await;
+    }
+
     if let Some(ref kanban_dir) = cli.kanban {
         return run_kanban_headless(&runtime, current_model, kanban_dir).await;
     }
@@ -338,6 +346,317 @@ async fn run_kanban_headless(runtime: &Runtime, model: ModelSpec, dir: &str) -> 
                                 && stats.feedback == 0
                                 && stats.refining == 0
                             {
+                                task.abort();
+                                if stats.errored > 0 {
+                                    return Err(anyhow!(
+                                        "kanban completed with {} errored task(s)",
+                                        stats.errored
+                                    ));
+                                }
+                                return Ok(());
+                            }
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            result = &mut task => {
+                match result {
+                    Ok(Ok(())) => break,
+                    Ok(Err(e)) => return Err(e),
+                    Err(e) if e.is_cancelled() => break,
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ── Headless mode ──────────────────────────────────────────────────────────
+
+mod ansi {
+    pub const RED: &str = "\x1b[31m";
+    pub const GREEN: &str = "\x1b[32m";
+    pub const YELLOW: &str = "\x1b[33m";
+    pub const BLUE: &str = "\x1b[34m";
+    pub const MAGENTA: &str = "\x1b[35m";
+    pub const CYAN: &str = "\x1b[36m";
+    pub const DIM: &str = "\x1b[2m";
+    pub const BOLD: &str = "\x1b[1m";
+    pub const RESET: &str = "\x1b[0m";
+}
+
+/// Formats KanbanEvents as colored, greppable terminal log lines.
+///
+/// Designed for iterative debugging:
+/// - Fixed-width event labels for easy grep (`DISCOVER`, `MOVE`, `ERROR`, …)
+/// - Timestamps in local time for quick correlation
+/// - Document names in quotes so you can `grep '"my-task"'`
+/// - Errors print multi-line detail (doc_id, error message) for copy-paste
+/// - Processing durations on completion events
+struct HeadlessOutput {
+    names: HashMap<String, String>,
+    started_at: HashMap<String, Instant>,
+    last_stats_line: String,
+}
+
+impl HeadlessOutput {
+    fn new() -> Self {
+        Self {
+            names: HashMap::new(),
+            started_at: HashMap::new(),
+            last_stats_line: String::new(),
+        }
+    }
+
+    fn doc_label(&self, id: &str) -> String {
+        self.names
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| id.chars().take(12).collect())
+    }
+
+    fn print_event(&mut self, event: &KanbanEvent) {
+        use ansi::*;
+        let ts = chrono::Local::now().format("%H:%M:%S");
+
+        match event {
+            KanbanEvent::DocumentDiscovered { id, name } => {
+                self.names.insert(id.clone(), name.clone());
+                eprintln!("{DIM}{ts}{RESET} {CYAN}DISCOVER{RESET} \"{name}\"");
+            }
+            KanbanEvent::StateChanged { id, from, to } => {
+                let label = self.doc_label(id);
+                let color = match to.as_str() {
+                    "complete" => GREEN,
+                    "error" => RED,
+                    "processing" => BLUE,
+                    "feedback" => YELLOW,
+                    "todo" => DIM,
+                    _ => RESET,
+                };
+                eprintln!(
+                    "{DIM}{ts}{RESET} {YELLOW}MOVE    {RESET} \"{label}\": {from} {DIM}→{RESET} {color}{to}{RESET}"
+                );
+            }
+            KanbanEvent::ProcessingStarted { id } => {
+                let label = self.doc_label(id);
+                self.started_at.insert(id.clone(), Instant::now());
+                eprintln!("{DIM}{ts}{RESET} {BLUE}PROCESS {RESET} \"{label}\": started");
+            }
+            KanbanEvent::ProcessingComplete { id } => {
+                let label = self.doc_label(id);
+                let elapsed = self
+                    .started_at
+                    .remove(id)
+                    .map(|t| {
+                        let secs = t.elapsed().as_secs();
+                        if secs >= 60 {
+                            format!(" ({}m{}s)", secs / 60, secs % 60)
+                        } else {
+                            format!(" ({secs}s)")
+                        }
+                    })
+                    .unwrap_or_default();
+                eprintln!(
+                    "{DIM}{ts}{RESET} {GREEN}DONE    {RESET} \"{label}\": completed{elapsed}"
+                );
+            }
+            KanbanEvent::FeedbackRequested { id, question } => {
+                let label = self.doc_label(id);
+                eprintln!(
+                    "{DIM}{ts}{RESET} {MAGENTA}FEEDBACK{RESET} \"{label}\": {question}"
+                );
+            }
+            KanbanEvent::StatsUpdated(stats) => {
+                let line = stats.status_line();
+                if line != self.last_stats_line {
+                    self.last_stats_line = line.clone();
+                    eprintln!("{DIM}{ts} STATS    {line}{RESET}");
+                }
+            }
+            KanbanEvent::Error { id, message } => {
+                if let Some(doc_id) = id {
+                    let label = self.doc_label(doc_id);
+                    eprintln!(
+                        "{DIM}{ts}{RESET} {RED}{BOLD}ERROR   {RESET} \"{label}\": {RED}{message}{RESET}"
+                    );
+                    eprintln!("                  {DIM}doc_id: {doc_id}{RESET}");
+                } else {
+                    eprintln!(
+                        "{DIM}{ts}{RESET} {RED}{BOLD}ERROR   {RESET} {RED}{message}{RESET}"
+                    );
+                }
+            }
+            KanbanEvent::StatusResponse { documents } => {
+                eprintln!(
+                    "{DIM}{ts}{RESET} {DIM}STATUS  {RESET} {} document(s)",
+                    documents.len()
+                );
+                for doc in documents {
+                    let color = match doc.state.as_str() {
+                        "complete" => GREEN,
+                        "error" => RED,
+                        "processing" => BLUE,
+                        "feedback" => MAGENTA,
+                        _ => DIM,
+                    };
+                    let elapsed = doc
+                        .elapsed_secs
+                        .map(|s| {
+                            if s >= 60 {
+                                format!(" ({}m{}s)", s / 60, s % 60)
+                            } else {
+                                format!(" ({s}s)")
+                            }
+                        })
+                        .unwrap_or_default();
+                    let err = doc
+                        .error
+                        .as_ref()
+                        .map(|e| format!(" {DIM}— {e}{RESET}"))
+                        .unwrap_or_default();
+                    eprintln!(
+                        "                  {color}{:12}{RESET} \"{}\"{elapsed}{err}",
+                        doc.state, doc.name
+                    );
+                }
+            }
+        }
+    }
+}
+
+async fn run_headless(runtime: &Runtime, model: ModelSpec, dir: &str) -> Result<()> {
+    let kanban_root = if Path::new(dir).is_absolute() {
+        PathBuf::from(dir)
+    } else {
+        runtime.cwd.join(dir)
+    };
+
+    // Headless kanban tasks need more turns than interactive mode since
+    // implementation tasks routinely read, write, and edit multiple files.
+    let max_turns = runtime.settings.max_turns.unwrap_or(50);
+
+    let config_template = AgentConfig {
+        system_prompt: String::new(),
+        model: model.clone(),
+        provider: runtime.provider.clone(),
+        tools: Vec::new(),
+        working_directory: PathBuf::new(),
+        session_store: SessionStore::from_path(PathBuf::new()),
+        max_turns,
+        auto_compact_threshold: runtime.settings.auto_compact_threshold.unwrap_or(48),
+    };
+
+    let (runner, mut event_rx, event_tx, command_tx) =
+        KanbanRunner::new(kanban_root.clone(), config_template)?;
+
+    // Start the API server
+    let addr: std::net::SocketAddr = "127.0.0.1:3141"
+        .parse()
+        .context("invalid bind address")?;
+
+    let actual_addr = mu_kanban_ui::start_server(KanbanUiConfig {
+        addr,
+        kanban_root: kanban_root.clone(),
+        event_tx: event_tx.clone(),
+        command_tx,
+    })
+    .await?;
+
+    // Startup banner
+    eprintln!(
+        "\n{dim}── mu headless ─────────────────────────────────────{reset}\n\
+         {dim}   kanban:{reset}  {path}\n\
+         {dim}   api:{reset}     http://{addr}\n\
+         {dim}   model:{reset}   {model}\n\
+         {dim}   logs:{reset}    {path}/logs/kanban.jsonl\n\
+         {dim}───────────────────────────────────────────────────{reset}\n",
+        dim = ansi::DIM,
+        reset = ansi::RESET,
+        path = kanban_root.display(),
+        addr = actual_addr,
+        model = model.id.0,
+    );
+
+    let mut output = HeadlessOutput::new();
+
+    // Pre-populate doc names from existing state so events for
+    // previously-discovered documents show names instead of truncated IDs.
+    if let Ok(state) = KanbanState::load_or_create(kanban_root.clone()) {
+        for (id, doc) in &state.documents {
+            output.names.insert(id.clone(), doc.original_name.clone());
+        }
+    }
+
+    let run_start = Instant::now();
+
+    // Completion requires 3 consecutive stable stats to avoid exiting before
+    // newly-created subtask files are discovered by the next scan cycle.
+    let mut stable_complete_count: u32 = 0;
+    let mut last_stable_total: usize = 0;
+
+    let task = tokio::spawn(async move {
+        let mut runner = runner;
+        runner.run().await.map_err(|e| anyhow::anyhow!("{e}"))
+    });
+    tokio::pin!(task);
+
+    // Ctrl+C handler for clean shutdown
+    let ctrl_c = tokio::signal::ctrl_c();
+    tokio::pin!(ctrl_c);
+
+    loop {
+        tokio::select! {
+            _ = &mut ctrl_c => {
+                let elapsed = run_start.elapsed().as_secs();
+                eprintln!(
+                    "\n{dim}── interrupted after {elapsed}s ──{reset}",
+                    dim = ansi::DIM,
+                    reset = ansi::RESET,
+                );
+                task.abort();
+                break;
+            }
+            event = event_rx.recv() => {
+                match event {
+                    Ok(ref ev) => {
+                        output.print_event(ev);
+                        if let KanbanEvent::StatsUpdated(ref stats) = ev {
+                            let looks_complete = stats.total_documents > 0
+                                && stats.todo == 0
+                                && stats.processing == 0
+                                && stats.feedback == 0
+                                && stats.refining == 0;
+
+                            if looks_complete && stats.total_documents == last_stable_total {
+                                stable_complete_count += 1;
+                            } else if looks_complete {
+                                // First time at this total, start counting
+                                stable_complete_count = 1;
+                            } else {
+                                stable_complete_count = 0;
+                            }
+                            last_stable_total = stats.total_documents;
+
+                            // Require 3 consecutive stable stats (~6s) to confirm
+                            // no new subtasks are being created
+                            if stable_complete_count >= 3 {
+                                let elapsed = run_start.elapsed().as_secs();
+                                let (color, label) = if stats.errored > 0 {
+                                    (ansi::RED, "completed with errors")
+                                } else {
+                                    (ansi::GREEN, "all tasks completed")
+                                };
+                                eprintln!(
+                                    "\n{color}── {label}: {done} done, {err} errored ({elapsed}s) ──{reset}",
+                                    done = stats.complete,
+                                    err = stats.errored,
+                                    reset = ansi::RESET,
+                                );
                                 task.abort();
                                 if stats.errored > 0 {
                                     return Err(anyhow!(
@@ -519,6 +838,34 @@ fn apply_kanban_event(app: &mut App, event: &KanbanEvent) {
                 .unwrap_or_default();
             app.push_message("kanban", format!("{prefix}error: {message}"));
         }
+        KanbanEvent::StatusResponse { documents } => {
+            let lines: Vec<String> = documents
+                .iter()
+                .map(|d| {
+                    let elapsed = d
+                        .elapsed_secs
+                        .map(|s| {
+                            if s >= 60 {
+                                format!(" ({}m{}s)", s / 60, s % 60)
+                            } else {
+                                format!(" ({s}s)")
+                            }
+                        })
+                        .unwrap_or_default();
+                    let err = d
+                        .error
+                        .as_ref()
+                        .map(|e| format!(" - {e}"))
+                        .unwrap_or_default();
+                    format!("[{}] {}{}{}", d.state, d.name, elapsed, err)
+                })
+                .collect();
+            if lines.is_empty() {
+                app.open_overlay("Kanban Status", vec!["No documents".to_string()]);
+            } else {
+                app.open_overlay("Kanban Status", lines);
+            }
+        }
     }
 }
 
@@ -630,6 +977,27 @@ async fn handle_command(
                     kb.task.abort();
                     app.push_message("kanban", "kanban mode stopped");
                     app.footer.status = "idle".to_string();
+                } else {
+                    app.push_message("system", "no kanban board is running");
+                }
+                return Ok(false);
+            }
+
+            // Handle "/kanban retry" sub-command
+            if folder_arg == "retry" {
+                if let Some(kb) = kanban_handle.as_ref() {
+                    let _ = kb.command_tx.send(KanbanCommand::RetryAllErrored);
+                    app.push_message("kanban", "retrying all errored items");
+                } else {
+                    app.push_message("system", "no kanban board is running");
+                }
+                return Ok(false);
+            }
+
+            // Handle "/kanban status" sub-command
+            if folder_arg == "status" {
+                if let Some(kb) = kanban_handle.as_ref() {
+                    let _ = kb.command_tx.send(KanbanCommand::RequestStatus);
                 } else {
                     app.push_message("system", "no kanban board is running");
                 }

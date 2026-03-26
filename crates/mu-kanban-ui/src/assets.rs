@@ -93,6 +93,17 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .conn-dot{width:6px;height:6px;border-radius:50%}
 .conn-dot.connected{background:var(--green)}
 .conn-dot.disconnected{background:var(--red)}
+
+/* Session log */
+.session-entry{padding:8px;margin-bottom:4px;border-radius:4px;border-left:3px solid var(--border)}
+.session-entry.role-user{border-left-color:var(--green);background:rgba(34,197,94,.05)}
+.session-entry.role-assistant{border-left-color:var(--blue);background:rgba(59,130,246,.05)}
+.session-entry.role-tool{border-left-color:var(--yellow);background:rgba(234,179,8,.05)}
+.session-entry.role-system{border-left-color:var(--purple);background:rgba(168,85,247,.05)}
+.session-role{font-size:11px;font-weight:600;text-transform:uppercase;margin-bottom:3px}
+.session-text{white-space:pre-wrap;word-break:break-word;font-family:monospace;font-size:11px;line-height:1.5}
+.session-tools{font-size:10px;color:var(--cyan);margin-top:3px}
+.session-empty{color:var(--text-dim);padding:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -140,6 +151,17 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
 </div>
 
+<!-- Session Log Modal -->
+<div class="modal-overlay" id="session-modal" style="display:none" onclick="if(event.target===this)hideSessionModal()">
+  <div class="modal" style="width:700px;max-height:85vh">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 id="session-title">Session Log</h2>
+      <button class="btn btn-sm" onclick="hideSessionModal()">Close</button>
+    </div>
+    <div id="session-log" style="overflow-y:auto;max-height:calc(85vh - 80px);font-size:12px"></div>
+  </div>
+</div>
+
 <script>
 const COLUMNS = ['draft','todo','processing','feedback','complete','error'];
 const COLUMN_LABELS = {draft:'Draft',todo:'Todo',processing:'Processing',feedback:'Feedback',complete:'Complete',error:'Error'};
@@ -173,7 +195,7 @@ function renderCard(doc) {
   const wdHtml = doc.work_dir ? `<div class="card-workdir">${esc(doc.work_dir)}</div>` : '';
   return `
     <div class="card" data-id="${doc.id}">
-      <div class="card-name">${esc(doc.original_name)}</div>
+      <div class="card-name" onclick="showSession('${doc.id}')" style="cursor:pointer">${esc(doc.original_name)}</div>
       <div class="card-meta">
         <span class="card-badge badge-${doc.state}">${doc.state}</span>
         <span>${ago}</span>
@@ -307,6 +329,31 @@ async function saveDraft() {
 function showCreateModal() { document.getElementById('create-modal').style.display = 'flex'; document.getElementById('task-name').focus(); }
 function hideCreateModal() { document.getElementById('create-modal').style.display = 'none'; }
 function hideEditModal() { document.getElementById('edit-modal').style.display = 'none'; editingId = null; }
+function hideSessionModal() { document.getElementById('session-modal').style.display = 'none'; }
+
+async function showSession(id) {
+  const doc = documents.find(d => d.id === id);
+  document.getElementById('session-title').textContent = doc ? `Session: ${doc.original_name}` : 'Session Log';
+  const logDiv = document.getElementById('session-log');
+  logDiv.innerHTML = '<div class="session-empty">Loading...</div>';
+  document.getElementById('session-modal').style.display = 'flex';
+  try {
+    const res = await fetch(`/api/documents/${id}/session`);
+    const entries = await res.json();
+    if (!entries.length) {
+      logDiv.innerHTML = '<div class="session-empty">No session log yet</div>';
+      return;
+    }
+    logDiv.innerHTML = entries.map(e => {
+      const toolHtml = e.tool_calls.length ? `<div class="session-tools">${e.tool_calls.map(t => esc(t)).join('<br>')}</div>` : '';
+      return `<div class="session-entry role-${e.role}"><div class="session-role">${e.role}</div><div class="session-text">${esc(e.text)}</div>${toolHtml}</div>`;
+    }).join('');
+    logDiv.scrollTop = logDiv.scrollHeight;
+  } catch(e) {
+    logDiv.innerHTML = `<div class="session-empty">Failed to load session</div>`;
+    console.error('showSession', e);
+  }
+}
 
 // --- SSE ---
 function connectSSE() {

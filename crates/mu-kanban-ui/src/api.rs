@@ -8,7 +8,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use mu_agent::kanban::document::{parse_preamble, DocumentState, KanbanDocument};
 use mu_agent::kanban::stats::KanbanStats;
-use mu_agent::{KanbanCommand, KanbanState};
+use mu_agent::{KanbanCommand, KanbanState, SessionStore};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -23,6 +23,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/stats", get(get_stats))
         .route("/api/documents/{id}/content", get(get_document_content))
         .route("/api/documents/{id}/content", put(update_document_content))
+        .route("/api/documents/{id}/session", get(get_document_session))
         .route("/api/documents", post(create_document))
         .route("/api/documents/{id}/submit", post(submit_document))
         .route("/api/documents/{id}/cancel", post(cancel_document))
@@ -112,6 +113,79 @@ async fn get_document_content(
         } else {
             Err(AppError::NotFound("document file not found".to_string()))
         }
+    }
+}
+
+/// Return session log entries for a document.
+/// Resolves the session path based on project_id / file_stem.
+async fn get_document_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<SessionLogEntry>>, AppError> {
+    let kanban = state.refresh_state().await?;
+    let doc = kanban
+        .documents
+        .get(&id)
+        .ok_or(AppError::NotFound("document not found".to_string()))?;
+
+    let result_dir = if let Some(ref project_id) = doc.project_id {
+        kanban.result_path().join(project_id)
+    } else {
+        kanban.result_path().join(doc.file_stem())
+    };
+
+    let session_dir = if doc.project_id.is_some() {
+        result_dir.join(".sessions").join(doc.file_stem())
+    } else {
+        result_dir
+    };
+
+    let session_path = session_dir.join("session.jsonl");
+    let store = SessionStore::from_path(session_path);
+    let entries = store.load_entries().unwrap_or_default();
+
+    let log: Vec<SessionLogEntry> = entries
+        .iter()
+        .map(|e| {
+            let role = format!("{:?}", e.message.role).to_lowercase();
+            let text = e.message.plain_text();
+            let tool_calls: Vec<String> = e
+                .message
+                .content
+                .iter()
+                .filter_map(|part| match part {
+                    mu_ai::ContentPart::ToolCall(call) => {
+                        let args = call.arguments.to_string();
+                        Some(format!("{}({})", call.name, truncate(&args, 120)))
+                    }
+                    _ => None,
+                })
+                .collect();
+            SessionLogEntry {
+                role,
+                text: truncate(&text, 2000),
+                tool_calls,
+                timestamp: e.timestamp.to_rfc3339(),
+            }
+        })
+        .collect();
+
+    Ok(Json(log))
+}
+
+#[derive(Serialize)]
+struct SessionLogEntry {
+    role: String,
+    text: String,
+    tool_calls: Vec<String>,
+    timestamp: String,
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max])
     }
 }
 

@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::document::DocumentState;
@@ -16,6 +16,9 @@ pub struct KanbanStats {
     pub errored: usize,
     pub total_refines: u32,
     pub recent_activity: Vec<String>,
+    /// Timestamp of the oldest document currently in Processing state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest_processing_since: Option<DateTime<Utc>>,
 }
 
 impl KanbanStats {
@@ -28,7 +31,15 @@ impl KanbanStats {
             match doc.state {
                 DocumentState::Draft => {}
                 DocumentState::Todo => stats.todo += 1,
-                DocumentState::Processing => stats.processing += 1,
+                DocumentState::Processing => {
+                    stats.processing += 1;
+                    let oldest = stats
+                        .oldest_processing_since
+                        .get_or_insert(doc.updated_at);
+                    if doc.updated_at < *oldest {
+                        *oldest = doc.updated_at;
+                    }
+                }
                 DocumentState::Feedback => stats.feedback += 1,
                 DocumentState::Complete => stats.complete += 1,
                 DocumentState::Refining => stats.refining += 1,
@@ -79,16 +90,33 @@ impl KanbanStats {
 
     pub fn write_stats_file(&self, state: &KanbanState) -> Result<(), MuAgentError> {
         let stats_dir = state.stats_path();
-        std::fs::create_dir_all(&stats_dir)?;
+        std::fs::create_dir_all(&stats_dir)
+            .map_err(|e| MuAgentError::io_path(e, stats_dir.display()))?;
+        let stats_file = stats_dir.join("STATS.md");
         let content = self.render_markdown();
-        std::fs::write(stats_dir.join("STATS.md"), content)?;
+        std::fs::write(&stats_file, content)
+            .map_err(|e| MuAgentError::io_path(e, stats_file.display()))?;
         Ok(())
     }
 
     pub fn status_line(&self) -> String {
+        let elapsed = self
+            .oldest_processing_since
+            .map(|since| {
+                let secs = Utc::now()
+                    .signed_duration_since(since)
+                    .num_seconds()
+                    .max(0) as u64;
+                if secs >= 60 {
+                    format!(" ({}m{}s)", secs / 60, secs % 60)
+                } else {
+                    format!(" ({secs}s)")
+                }
+            })
+            .unwrap_or_default();
         format!(
-            "todo={} proc={} fb={} done={}",
-            self.todo, self.processing, self.feedback, self.complete
+            "todo={} proc={}{} fb={} done={} err={}",
+            self.todo, self.processing, elapsed, self.feedback, self.complete, self.errored
         )
     }
 }
@@ -124,6 +152,7 @@ mod tests {
             errored: 0,
             total_refines: 1,
             recent_activity: vec!["[12:00:00] processed task-a".to_string()],
+            oldest_processing_since: None,
         };
         let md = stats.render_markdown();
         assert!(md.contains("# Kanban Stats"));
@@ -135,11 +164,28 @@ mod tests {
     fn status_line_format() {
         let stats = KanbanStats {
             todo: 3,
-            processing: 1,
+            processing: 0,
             feedback: 0,
             complete: 5,
+            errored: 1,
             ..Default::default()
         };
-        assert_eq!(stats.status_line(), "todo=3 proc=1 fb=0 done=5");
+        assert_eq!(stats.status_line(), "todo=3 proc=0 fb=0 done=5 err=1");
+    }
+
+    #[test]
+    fn status_line_includes_elapsed_when_processing() {
+        let stats = KanbanStats {
+            todo: 0,
+            processing: 1,
+            feedback: 0,
+            complete: 0,
+            errored: 0,
+            oldest_processing_since: Some(Utc::now() - chrono::Duration::seconds(125)),
+            ..Default::default()
+        };
+        let line = stats.status_line();
+        assert!(line.contains("proc=1 (2m"), "expected elapsed time, got: {line}");
+        assert!(line.contains("err=0"));
     }
 }

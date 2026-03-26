@@ -33,6 +33,11 @@ pub enum MuAgentError {
     Ai(#[from] mu_ai::MuAiError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("{context}: {source}")]
+    IoPath {
+        context: String,
+        source: std::io::Error,
+    },
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error("tool {0} not found")]
@@ -41,6 +46,15 @@ pub enum MuAgentError {
     MaxTurnsExceeded,
     #[error("invalid state: {0}")]
     InvalidState(String),
+}
+
+impl MuAgentError {
+    pub fn io_path(source: std::io::Error, path: impl std::fmt::Display) -> Self {
+        Self::IoPath {
+            context: path.to_string(),
+            source,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -411,14 +425,21 @@ impl Agent {
                 return Err(MuAgentError::ToolNotFound(call.name));
             };
 
-            let output = tool
+            let output = match tool
                 .run(
                     call.arguments.clone(),
                     ToolContext {
                         working_directory: self.config.working_directory.clone(),
                     },
                 )
-                .await?;
+                .await
+            {
+                Ok(output) => output,
+                Err(err) => ToolOutput {
+                    content: format!("Error: {err}"),
+                    is_error: true,
+                },
+            };
             let message = Message::with_tool_result(
                 call.id.clone(),
                 call.name.clone(),

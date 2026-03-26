@@ -7,6 +7,7 @@ pub mod watcher;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use chrono::Utc;
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
@@ -19,6 +20,23 @@ use self::stats::KanbanStats;
 use self::watcher::KanbanWatcher;
 use crate::{Agent, AgentConfig, MuAgentError, SessionEntry, SessionStore};
 use mu_ai::{ContentPart, Role};
+
+/// Rename a file with path context in the error message.
+fn fs_rename(from: &Path, to: &Path) -> Result<(), MuAgentError> {
+    std::fs::rename(from, to).map_err(|e| {
+        MuAgentError::io_path(e, format!("rename {} -> {}", from.display(), to.display()))
+    })
+}
+
+/// Write a file with path context in the error message.
+fn fs_write(path: &Path, content: &str) -> Result<(), MuAgentError> {
+    std::fs::write(path, content).map_err(|e| MuAgentError::io_path(e, path.display()))
+}
+
+/// Create directories with path context in the error message.
+fn fs_mkdir(path: &Path) -> Result<(), MuAgentError> {
+    std::fs::create_dir_all(path).map_err(|e| MuAgentError::io_path(e, path.display()))
+}
 
 const KANBAN_SYSTEM_PROMPT: &str = r#"You are Mu, a pragmatic coding agent working in kanban mode.
 
@@ -106,6 +124,17 @@ pub enum KanbanEvent {
         id: Option<String>,
         message: String,
     },
+    StatusResponse {
+        documents: Vec<KanbanDocumentSummary>,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct KanbanDocumentSummary {
+    pub name: String,
+    pub state: String,
+    pub elapsed_secs: Option<i64>,
+    pub error: Option<String>,
 }
 
 /// Commands that can be sent to the KanbanRunner from external sources (e.g. web UI).
@@ -132,6 +161,10 @@ pub enum KanbanCommand {
     },
     /// Reload state from disk (used when external code writes directly)
     ReloadState,
+    /// Retry all errored documents: moves Error → Todo for each
+    RetryAllErrored,
+    /// Request a status snapshot of all documents
+    RequestStatus,
 }
 
 pub struct KanbanRunner {
@@ -321,39 +354,37 @@ impl KanbanRunner {
                     None => return Ok(()),
                 };
 
-                // Only cancel from Todo, Processing, or Error
-                if !doc.state.can_transition_to(&DocumentState::Draft) {
-                    return Ok(());
-                }
-
                 let from = doc.state.to_string();
 
-                // Move file back to DRAFT/
+                // Processing → Todo (requeue), others → Draft
+                let (target_state, target_folder) =
+                    if doc.state == DocumentState::Processing {
+                        (DocumentState::Todo, self.state.todo_path())
+                    } else if doc.state.can_transition_to(&DocumentState::Draft) {
+                        (DocumentState::Draft, self.state.draft_path())
+                    } else {
+                        return Ok(());
+                    };
+
                 let source_folder = doc.state.folder_name();
                 let source_file = self
                     .state
                     .folder_path(source_folder)
                     .join(format!("{}.md", doc.file_stem()));
-                let draft_file = self
-                    .state
-                    .draft_path()
-                    .join(format!("{}.md", doc.file_stem()));
+                let dest_file = target_folder.join(format!("{}.md", doc.file_stem()));
 
                 if source_file.exists() {
-                    std::fs::rename(&source_file, &draft_file)?;
+                    fs_rename(&source_file, &dest_file)?;
                 }
 
+                let to = target_state.to_string();
                 if let Some(d) = self.state.get_document_mut(&id) {
-                    d.transition_to(DocumentState::Draft);
+                    d.transition_to(target_state);
                     d.error = None;
                 }
                 self.state.save()?;
 
-                self.emit(KanbanEvent::StateChanged {
-                    id,
-                    from,
-                    to: "draft".to_string(),
-                });
+                self.emit(KanbanEvent::StateChanged { id, from, to });
             }
             KanbanCommand::CreateDraft { name, content, work_dir } => {
                 let id = Uuid::now_v7().to_string();
@@ -383,7 +414,7 @@ impl KanbanRunner {
                     .state
                     .draft_path()
                     .join(format!("{}.md", doc.file_stem()));
-                std::fs::write(&draft_file, &content)?;
+                fs_write(&draft_file, &content)?;
 
                 self.state.insert_document(doc);
                 self.state.save()?;
@@ -412,7 +443,7 @@ impl KanbanRunner {
                     .todo_path()
                     .join(format!("{}.md", doc.file_stem()));
                 if draft_file.exists() {
-                    std::fs::rename(&draft_file, &todo_file)?;
+                    fs_rename(&draft_file, &todo_file)?;
                 }
 
                 if let Some(d) = self.state.get_document_mut(&id) {
@@ -445,7 +476,7 @@ impl KanbanRunner {
                     .todo_path()
                     .join(format!("{}.md", doc.file_stem()));
                 if error_file.exists() {
-                    std::fs::rename(&error_file, &todo_file)?;
+                    fs_rename(&error_file, &todo_file)?;
                 }
 
                 if let Some(d) = self.state.get_document_mut(&id) {
@@ -487,7 +518,7 @@ impl KanbanRunner {
                     .state
                     .todo_path()
                     .join(format!("{}.md", doc.file_stem()));
-                std::fs::write(&todo_file, &content)?;
+                fs_write(&todo_file, &content)?;
 
                 self.state.insert_document(doc);
                 self.state.save()?;
@@ -502,12 +533,125 @@ impl KanbanRunner {
                     self.state = fresh;
                 }
             }
+            KanbanCommand::RetryAllErrored => {
+                let errored_ids: Vec<String> = self
+                    .state
+                    .documents
+                    .values()
+                    .filter(|d| d.state == DocumentState::Error)
+                    .map(|d| d.id.clone())
+                    .collect();
+                for id in errored_ids {
+                    let doc = match self.state.get_document(&id) {
+                        Some(doc) => doc.clone(),
+                        None => continue,
+                    };
+                    let error_file = self
+                        .state
+                        .folder_path(doc.state.folder_name())
+                        .join(format!("{}.md", doc.file_stem()));
+                    let todo_file = self
+                        .state
+                        .todo_path()
+                        .join(format!("{}.md", doc.file_stem()));
+                    if error_file.exists() {
+                        fs_rename(&error_file, &todo_file)?;
+                    }
+                    if let Some(d) = self.state.get_document_mut(&id) {
+                        d.error = None;
+                        d.transition_to(DocumentState::Todo);
+                    }
+                    self.emit(KanbanEvent::StateChanged {
+                        id,
+                        from: "error".to_string(),
+                        to: "todo".to_string(),
+                    });
+                }
+                self.state.save()?;
+            }
+            KanbanCommand::RequestStatus => {
+                let now = Utc::now();
+                let documents: Vec<KanbanDocumentSummary> = self
+                    .state
+                    .documents
+                    .values()
+                    .filter(|d| d.state != DocumentState::Draft)
+                    .map(|d| {
+                        let elapsed_secs = if d.state == DocumentState::Processing {
+                            Some(now.signed_duration_since(d.updated_at).num_seconds().max(0))
+                        } else {
+                            None
+                        };
+                        KanbanDocumentSummary {
+                            name: d.original_name.clone(),
+                            state: d.state.to_string(),
+                            elapsed_secs,
+                            error: d.error.clone(),
+                        }
+                    })
+                    .collect();
+                self.emit(KanbanEvent::StatusResponse { documents });
+            }
         }
         Ok(())
     }
 
     /// Scan filesystem and reconcile with in-memory state.
     fn scan_and_reconcile(&mut self) -> Result<(), MuAgentError> {
+        // Discover new .md files dropped into DRAFT/
+        let draft_files = KanbanState::list_md_files(&self.state.draft_path())?;
+        for path in draft_files {
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+
+            // Already tracked (has UUID in filename)
+            if let Some((_name, id)) = parse_kanban_filename(&filename) {
+                if self.state.get_document(&id).is_some() {
+                    continue;
+                }
+            }
+
+            // New untracked file in DRAFT — assign UUID and register as draft
+            let original_name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("untitled")
+                .to_string();
+            let id = Uuid::now_v7().to_string();
+            let mut doc = KanbanDocument::new(id.clone(), original_name.clone());
+            doc.state = DocumentState::Draft;
+
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let (preamble, _body) = parse_preamble(&content);
+                doc.task_id = preamble.task_id;
+                doc.depends_on = preamble.depends_on;
+                doc.persona = preamble.persona;
+                if let Some(ref pid) = preamble.project_id {
+                    doc.project_id = Some(pid.clone());
+                }
+                if let Some(ref wd) = preamble.work_dir {
+                    doc.work_dir = Some(PathBuf::from(wd));
+                }
+            }
+            if doc.task_id.is_none() {
+                doc.task_id = Some(original_name.clone());
+            }
+
+            let new_filename = format!("{}.md", doc.file_stem());
+            let new_path = self.state.draft_path().join(&new_filename);
+
+            fs_rename(&path, &new_path)?;
+            self.state.insert_document(doc);
+            self.state.save()?;
+
+            self.emit(KanbanEvent::DocumentDiscovered {
+                id,
+                name: original_name,
+            });
+        }
+
         // Discover new .md files in TODO/
         let todo_files = KanbanState::list_md_files(&self.state.todo_path())?;
         for path in todo_files {
@@ -574,7 +718,7 @@ impl KanbanRunner {
                     let new_filename = format!("{}.md", doc.file_stem());
                     let new_path = self.state.todo_path().join(&new_filename);
 
-                    std::fs::rename(&path, &new_path)?;
+                    fs_rename(&path, &new_path)?;
                     self.state.insert_document(doc);
                     self.state.save()?;
 
@@ -616,7 +760,7 @@ impl KanbanRunner {
             let new_filename = format!("{}.md", doc.file_stem());
             let new_path = self.state.todo_path().join(&new_filename);
 
-            std::fs::rename(&path, &new_path)?;
+            fs_rename(&path, &new_path)?;
             self.state.insert_document(doc);
             self.state.save()?;
 
@@ -646,13 +790,13 @@ impl KanbanRunner {
                             // Move back to PROCESSING
                             let processing_path =
                                 self.state.processing_path().join(&filename);
-                            std::fs::rename(&path, &processing_path)?;
+                            fs_rename(&path, &processing_path)?;
                             // Also move the response file
                             let response_dest = self.state.processing_path().join(format!(
                                 "{}_response.md",
                                 doc.file_stem()
                             ));
-                            std::fs::rename(&response_file, &response_dest)?;
+                            fs_rename(&response_file, &response_dest)?;
 
                             let from = doc.state.to_string();
                             if let Some(doc) = self.state.get_document_mut(&id) {
@@ -836,7 +980,7 @@ impl KanbanRunner {
             .join(format!("{}.md", doc.file_stem()));
 
         if todo_file.exists() {
-            std::fs::rename(&todo_file, &processing_file)?;
+            fs_rename(&todo_file, &processing_file)?;
         }
 
         if let Some(d) = self.state.get_document_mut(doc_id) {
@@ -864,9 +1008,9 @@ impl KanbanRunner {
         let result_dir = self.result_dir_for(&doc);
         let working_dir = self.working_dir_for(&doc);
         let session_dir = self.session_dir_for(&doc);
-        std::fs::create_dir_all(&result_dir)?;
-        std::fs::create_dir_all(&working_dir)?;
-        std::fs::create_dir_all(&session_dir)?;
+        fs_mkdir(&result_dir)?;
+        fs_mkdir(&working_dir)?;
+        fs_mkdir(&session_dir)?;
 
         let session_path = session_dir.join("session.jsonl");
         let config = AgentConfig {
@@ -935,8 +1079,18 @@ impl KanbanRunner {
                 processing_file,
                 error,
             } => {
+                // Move the file back to TODO/ so it can be retried instead of
+                // deleting it (which made retry impossible).
                 if processing_file.exists() {
-                    std::fs::remove_file(&processing_file)?;
+                    let todo_dest = self
+                        .state
+                        .todo_path()
+                        .join(
+                            processing_file
+                                .file_name()
+                                .unwrap_or_default(),
+                        );
+                    let _ = fs_rename(&processing_file, &todo_dest);
                 }
                 if let Some(doc) = self.state.get_document_mut(&doc_id) {
                     doc.error = Some(error.clone());
@@ -1150,7 +1304,7 @@ impl KanbanRunner {
                     let doc_source = session_dir.join("original_task.md");
                     if doc_source.exists() {
                         let content = std::fs::read_to_string(&doc_source)?;
-                        std::fs::write(&processing_file, content)?;
+                        fs_write(&processing_file, &content)?;
                     }
                     self.move_to_feedback(doc_id, &processing_file, &question)?;
                 } else {
@@ -1197,7 +1351,7 @@ impl KanbanRunner {
             .join(format!("{}.md", doc.file_stem()));
 
         if processing_file.exists() {
-            std::fs::rename(processing_file, &feedback_file)?;
+            fs_rename(processing_file, &feedback_file)?;
         }
 
         // Write the feedback request alongside
@@ -1205,7 +1359,7 @@ impl KanbanRunner {
             .state
             .feedback_path()
             .join(format!("{}_question.md", doc.file_stem()));
-        std::fs::write(&feedback_request_dest, question)?;
+        fs_write(&feedback_request_dest, question)?;
 
         if let Some(doc) = self.state.get_document_mut(doc_id) {
             doc.transition_to(DocumentState::Feedback);
@@ -1313,7 +1467,8 @@ fn generate_summary(result_dir: &Path) -> Result<(), MuAgentError> {
         }
     }
 
-    std::fs::write(result_dir.join("SUMMARY.md"), md)?;
+    let summary_path = result_dir.join("SUMMARY.md");
+    fs_write(&summary_path, &md)?;
     Ok(())
 }
 
