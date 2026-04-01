@@ -44,7 +44,7 @@ You are processing a task document from a kanban board. The document content bel
 
 **Working directory**: Your working directory is set for this specific task. All files you create will be deposited there.
 
-**Available tools**: read, write, edit, bash, request_feedback, create_task.
+**Available tools**: read, write, edit, bash, grep, find, ls, request_feedback, create_task.
 
 ## Deciding whether to decompose or implement
 

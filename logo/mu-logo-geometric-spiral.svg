@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="spiralGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#86efac"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="spiralStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.25"/>
+    </linearGradient>
+    <filter id="spiralGlow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="spiralTraceGlow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="100" cy="100" r="100" fill="#0a0d14"/>
+
+  <!-- Golden ratio rectangles (nested, subtle scaffolding) -->
+  <g fill="none" stroke="#22c55e" stroke-width="0.5">
+    <rect x="14" y="14" width="172" height="172" rx="2" opacity="0.06"/>
+    <rect x="14" y="14" width="106" height="172" rx="2" opacity="0.05"/>
+    <rect x="14" y="80" width="106" height="106" rx="2" opacity="0.04"/>
+    <rect x="80" y="80" width="40" height="106" rx="1" opacity="0.035"/>
+  </g>
+
+  <!-- Primary golden spiral — prominent, continuous, glowing -->
+  <g fill="none" filter="url(#spiralTraceGlow)">
+    <!-- Spiral drawn as a single continuous path of quarter-circle arcs
+         expanding outward from the center by the golden ratio -->
+    <path d="M 100 100
+             A 10 10 0 0 1 110 90
+             A 16 16 0 0 1 126 106
+             A 26 26 0 0 1 100 132
+             A 42 42 0 0 1 58 90
+             A 68 68 0 0 1 126 22
+             A 110 110 0 0 1 195 100"
+          stroke="url(#spiralStroke)" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- Second spiral arm (mirrored, dimmer) giving a sense of rotation -->
+    <path d="M 100 100
+             A 10 10 0 0 0 90 110
+             A 16 16 0 0 0 74 94
+             A 26 26 0 0 0 100 68
+             A 42 42 0 0 0 142 110
+             A 68 68 0 0 0 74 178
+             A 110 110 0 0 0 5 100"
+          stroke="#22c55e" stroke-width="1.2" stroke-linecap="round" opacity="0.2"/>
+  </g>
+
+  <!-- Spiral center point -->
+  <circle cx="100" cy="100" r="2" fill="#4ade80" opacity="0.5"/>
+
+  <!-- Construction points at spiral/rectangle intersections -->
+  <g fill="#4ade80" opacity="0.3">
+    <circle cx="110" cy="90" r="1.8"/>
+    <circle cx="126" cy="106" r="1.8"/>
+    <circle cx="100" cy="132" r="1.8"/>
+    <circle cx="58" cy="90" r="1.8"/>
+    <circle cx="126" cy="22" r="1.5"/>
+  </g>
+
+  <!-- Thin construction lines (crosshairs through center) -->
+  <g stroke="#22c55e" stroke-width="0.3" opacity="0.08">
+    <line x1="100" y1="5" x2="100" y2="195"/>
+    <line x1="5" y1="100" x2="195" y2="100"/>
+    <line x1="20" y1="20" x2="180" y2="180"/>
+    <line x1="180" y1="20" x2="20" y2="180"/>
+  </g>
+
+  <!-- The mu character -->
+  <text x="100" y="125" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="bold"
+        fill="url(#spiralGrad)" text-anchor="middle" filter="url(#spiralGlow)">&#x03BC;</text>
+
+  <!-- Outer ring -->
+  <circle cx="100" cy="100" r="96" fill="none" stroke="#22c55e" stroke-width="0.8" opacity="0.15"/>
+  <circle cx="100" cy="100" r="98" fill="none" stroke="#22c55e" stroke-width="0.3" opacity="0.1"/>
+</svg>

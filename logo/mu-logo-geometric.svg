@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="geoGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117"/>
+      <stop offset="100%" stop-color="#161925"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#22c55e" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="100" fill="url(#bgGrad)"/>
+
+  <!-- Decorative ring -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="#22c55e" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="100" cy="100" r="92" fill="none" stroke="#22c55e" stroke-width="0.3" opacity="0.15"/>
+
+  <!-- Geometric μ built from paths -->
+  <g filter="url(#shadow)">
+    <!-- Left vertical stroke of μ -->
+    <path d="M 58 58 L 58 145 Q 58 155 68 155 Q 78 155 78 145 L 78 58"
+          fill="none" stroke="url(#geoGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Right vertical stroke of μ -->
+    <path d="M 108 58 L 108 145 Q 108 155 118 155 Q 128 155 128 145 L 128 58"
+          fill="none" stroke="url(#geoGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Bottom connecting curve -->
+    <path d="M 78 130 Q 78 155 93 155 Q 108 155 108 130"
+          fill="none" stroke="url(#geoGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Right descender tail -->
+    <path d="M 128 130 L 128 165 Q 128 175 138 175 L 148 175"
+          fill="none" stroke="url(#geoGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Accent dots -->
+  <circle cx="58" cy="48" r="3" fill="#4ade80" opacity="0.6"/>
+  <circle cx="128" cy="48" r="3" fill="#4ade80" opacity="0.6"/>
+  <circle cx="148" cy="175" r="3" fill="#4ade80" opacity="0.4"/>
+</svg>

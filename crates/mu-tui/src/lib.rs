@@ -5,12 +5,67 @@ use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mu_agent::AgentEvent;
 use mu_ai::{ContentPart, Message};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 use serde::{Deserialize, Serialize};
+
+pub const STARTUP_LOGO: &str = "\
+\n\
+      ╭──────────────────╮\n\
+      │ ● ● ●            │\n\
+      │ ▂                │\n\
+      │        μ         │\n\
+      │                  │\n\
+      ╰──────────────────╯\n\
+\n\
+     pragmatic coding agent";
+
+fn logo_line_to_spans(line: &str) -> Line<'static> {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut buf = String::new();
+    let mut cur_color: Option<Color> = None;
+
+    let color_for = |ch: char| -> Option<Color> {
+        match ch {
+            '█' => Some(Color::Rgb(0, 230, 255)),
+            '▓' => Some(Color::Rgb(0, 150, 180)),
+            '░' => Some(Color::Rgb(0, 50, 70)),
+            'μ' | '▂' => Some(Color::Rgb(34, 197, 94)),
+            '╭' | '╮' | '╰' | '╯' | '─' | '│' | '●' => Some(Color::Rgb(110, 120, 130)),
+            _ if !ch.is_whitespace() => Some(Color::DarkGray),
+            _ => None,
+        }
+    };
+
+    for ch in line.chars() {
+        let color = color_for(ch);
+        if color == cur_color {
+            buf.push(ch);
+        } else {
+            if !buf.is_empty() {
+                let style = match cur_color {
+                    Some(c) => Style::default().fg(c),
+                    None => Style::default(),
+                };
+                spans.push(Span::styled(std::mem::take(&mut buf), style));
+            }
+            cur_color = color;
+            buf.push(ch);
+        }
+    }
+    if !buf.is_empty() {
+        let style = match cur_color {
+            Some(c) => Style::default().fg(c),
+            None => Style::default(),
+        };
+        spans.push(Span::styled(buf, style));
+    }
+
+    Line::from(spans)
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FooterData {
@@ -482,47 +537,70 @@ impl App {
             ])
             .split(frame.area());
 
-        let messages = self
-            .messages
-            .iter()
-            .map(|message| {
-                let role_color = match message.role.as_str() {
-                    "user" => Color::Green,
-                    "assistant" => Color::Blue,
-                    "tool" => Color::Yellow,
-                    "system" | "kanban" => Color::Magenta,
-                    _ => Color::Cyan,
-                };
-                let text_style = if message.role == "tool"
-                    && message.text.starts_with("tool error")
-                {
-                    Style::default().fg(Color::Red)
-                } else {
-                    Style::default()
-                };
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("[{}] ", message.role),
+        if self.messages.is_empty() {
+            let logo_lines: Vec<Line<'_>> = STARTUP_LOGO
+                .lines()
+                .map(|line| logo_line_to_spans(line.trim_start()))
+                .collect();
+            let logo_height = logo_lines.len() as u16;
+            let area_height = layout[0].height.saturating_sub(2); // subtract border
+            let pad = area_height.saturating_sub(logo_height) / 2;
+            let mut lines: Vec<Line<'_>> = Vec::new();
+            for _ in 0..pad {
+                lines.push(Line::from(""));
+            }
+            lines.extend(logo_lines);
+            let logo = Paragraph::new(lines)
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::DarkGray)),
+                );
+            frame.render_widget(logo, layout[0]);
+        } else {
+            let messages = self
+                .messages
+                .iter()
+                .map(|message| {
+                    let role_color = match message.role.as_str() {
+                        "user" => Color::Green,
+                        "assistant" => Color::Blue,
+                        "tool" => Color::Yellow,
+                        "system" | "kanban" => Color::Magenta,
+                        _ => Color::Cyan,
+                    };
+                    let text_style = if message.role == "tool"
+                        && message.text.starts_with("tool error")
+                    {
+                        Style::default().fg(Color::Red)
+                    } else {
                         Style::default()
-                            .fg(role_color)
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(
+                            format!("[{}] ", message.role),
+                            Style::default()
+                                .fg(role_color)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(message.text.clone(), text_style),
+                    ]))
+                })
+                .collect::<Vec<_>>();
+            let list = List::new(messages).block(
+                Block::default()
+                    .title(Span::styled(
+                        " Messages ",
+                        Style::default()
+                            .fg(Color::White)
                             .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(message.text.clone(), text_style),
-                ]))
-            })
-            .collect::<Vec<_>>();
-        let list = List::new(messages).block(
-            Block::default()
-                .title(Span::styled(
-                    " Messages ",
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
-        );
-        frame.render_widget(list, layout[0]);
+                    ))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray)),
+            );
+            frame.render_widget(list, layout[0]);
+        }
 
         // Input prompt with cwd prefix
         let prompt = format!("{} > ", self.footer.cwd);

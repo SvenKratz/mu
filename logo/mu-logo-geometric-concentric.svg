@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="concentricGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#86efac"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <filter id="concentricGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="muClip">
+      <text x="100" y="128" font-family="Georgia, 'Times New Roman', serif" font-size="85" font-weight="bold"
+            text-anchor="middle">&#x03BC;</text>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="24" fill="#080b12"/>
+
+  <!-- Outer concentric shapes (background decoration) -->
+  <!-- Rotating squares -->
+  <g fill="none" stroke="#22c55e" stroke-width="0.5">
+    <rect x="10" y="10" width="180" height="180" rx="2" opacity="0.05" transform="rotate(0, 100, 100)"/>
+    <rect x="18" y="18" width="164" height="164" rx="2" opacity="0.06" transform="rotate(5, 100, 100)"/>
+    <rect x="26" y="26" width="148" height="148" rx="2" opacity="0.07" transform="rotate(10, 100, 100)"/>
+    <rect x="34" y="34" width="132" height="132" rx="2" opacity="0.08" transform="rotate(15, 100, 100)"/>
+    <rect x="42" y="42" width="116" height="116" rx="2" opacity="0.09" transform="rotate(20, 100, 100)"/>
+    <rect x="50" y="50" width="100" height="100" rx="2" opacity="0.10" transform="rotate(25, 100, 100)"/>
+    <rect x="58" y="58" width="84" height="84" rx="2" opacity="0.11" transform="rotate(30, 100, 100)"/>
+    <rect x="66" y="66" width="68" height="68" rx="2" opacity="0.12" transform="rotate(35, 100, 100)"/>
+    <rect x="74" y="74" width="52" height="52" rx="2" opacity="0.13" transform="rotate(40, 100, 100)"/>
+    <rect x="82" y="82" width="36" height="36" rx="2" opacity="0.14" transform="rotate(45, 100, 100)"/>
+  </g>
+
+  <!-- Concentric circles -->
+  <g fill="none" stroke="#22c55e" stroke-width="0.4">
+    <circle cx="100" cy="100" r="90" opacity="0.06"/>
+    <circle cx="100" cy="100" r="75" opacity="0.08"/>
+    <circle cx="100" cy="100" r="60" opacity="0.1"/>
+    <circle cx="100" cy="100" r="45" opacity="0.12"/>
+    <circle cx="100" cy="100" r="30" opacity="0.14"/>
+  </g>
+
+  <!-- Concentric rings visible INSIDE the μ shape (clipped) -->
+  <g clip-path="url(#muClip)">
+    <g fill="none" stroke-width="2">
+      <circle cx="100" cy="100" r="90" stroke="#0d7a32" opacity="0.9"/>
+      <circle cx="100" cy="100" r="82" stroke="#109a3d" opacity="0.85"/>
+      <circle cx="100" cy="100" r="74" stroke="#13b046" opacity="0.8"/>
+      <circle cx="100" cy="100" r="66" stroke="#16a34a" opacity="0.75"/>
+      <circle cx="100" cy="100" r="58" stroke="#1bbd53" opacity="0.7"/>
+      <circle cx="100" cy="100" r="50" stroke="#22c55e" opacity="0.7"/>
+      <circle cx="100" cy="100" r="42" stroke="#34d46c" opacity="0.7"/>
+      <circle cx="100" cy="100" r="34" stroke="#4ade80" opacity="0.7"/>
+      <circle cx="100" cy="100" r="26" stroke="#65e598" opacity="0.7"/>
+      <circle cx="100" cy="100" r="18" stroke="#86efac" opacity="0.7"/>
+      <circle cx="100" cy="100" r="10" stroke="#a7f5be" opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- Thin outline of μ for definition -->
+  <text x="100" y="128" font-family="Georgia, 'Times New Roman', serif" font-size="85" font-weight="bold"
+        fill="none" stroke="#22c55e" stroke-width="1" text-anchor="middle" opacity="0.4"
+        filter="url(#concentricGlow)">&#x03BC;</text>
+
+  <!-- Corner accents -->
+  <g stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.2">
+    <path d="M 15 30 L 15 15 L 30 15"/>
+    <path d="M 170 15 L 185 15 L 185 30"/>
+    <path d="M 185 170 L 185 185 L 170 185"/>
+    <path d="M 30 185 L 15 185 L 15 170"/>
+  </g>
+</svg>

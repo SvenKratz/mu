@@ -26,6 +26,7 @@ use mu_kanban_ui::KanbanUiConfig;
 use mu_ai::{load_custom_models, ModelRegistry, ModelSpec, ProviderId, RouterProvider};
 use mu_tui::{
     App, AppAction, FooterData, OverlayItem, OverlayKind, OverlaySelection, SlashCommand,
+    STARTUP_LOGO,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -387,6 +388,37 @@ mod ansi {
     pub const DIM: &str = "\x1b[2m";
     pub const BOLD: &str = "\x1b[1m";
     pub const RESET: &str = "\x1b[0m";
+
+    pub fn colorize_logo(logo: &str) -> String {
+        let mut out = String::new();
+        for ch in logo.chars() {
+            match ch {
+                '█' => out.push_str("\x1b[38;2;0;230;255m"),
+                '▓' => out.push_str("\x1b[38;2;0;150;180m"),
+                '░' => out.push_str("\x1b[38;2;0;50;70m"),
+                'μ' | '▂' => out.push_str("\x1b[38;2;34;197;94m"),
+                '╭' | '╮' | '╰' | '╯' | '─' | '│' | '●' => {
+                    out.push_str("\x1b[38;2;110;120;130m");
+                }
+                '\n' => {
+                    out.push_str("\x1b[0m\n");
+                    continue;
+                }
+                c if !c.is_whitespace() => {
+                    out.push_str("\x1b[2m");
+                    out.push(c);
+                    continue;
+                }
+                c => {
+                    out.push(c);
+                    continue;
+                }
+            }
+            out.push(ch);
+        }
+        out.push_str("\x1b[0m");
+        out
+    }
 }
 
 /// Formats KanbanEvents as colored, greppable terminal log lines.
@@ -569,12 +601,14 @@ async fn run_headless(runtime: &Runtime, model: ModelSpec, dir: &str) -> Result<
 
     // Startup banner
     eprintln!(
-        "\n{dim}── mu headless ─────────────────────────────────────{reset}\n\
+        "{logo}\n\
+         {dim}── headless ────────────────────────────────────────{reset}\n\
          {dim}   kanban:{reset}  {path}\n\
          {dim}   api:{reset}     http://{addr}\n\
          {dim}   model:{reset}   {model}\n\
          {dim}   logs:{reset}    {path}/logs/kanban.jsonl\n\
          {dim}───────────────────────────────────────────────────{reset}\n",
+        logo = ansi::colorize_logo(STARTUP_LOGO),
         dim = ansi::DIM,
         reset = ansi::RESET,
         path = kanban_root.display(),

@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="frontFace" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="topFace" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#86efac"/>
+      <stop offset="100%" stop-color="#4ade80"/>
+    </linearGradient>
+    <linearGradient id="sideFace" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#0d7a32"/>
+    </linearGradient>
+    <linearGradient id="bgGrad3d" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117"/>
+      <stop offset="100%" stop-color="#141822"/>
+    </linearGradient>
+    <filter id="blockShadow">
+      <feDropShadow dx="3" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="24" fill="url(#bgGrad3d)"/>
+
+  <!-- Floor grid (isometric perspective hint) -->
+  <g stroke="#22c55e" stroke-width="0.3" opacity="0.08">
+    <line x1="0" y1="180" x2="200" y2="180"/>
+    <line x1="0" y1="185" x2="200" y2="185"/>
+    <line x1="0" y1="190" x2="200" y2="190"/>
+  </g>
+
+  <!-- 3D extruded μ built from isometric polygons -->
+  <g filter="url(#blockShadow)">
+    <!-- Depth = 12px to the right and up (isometric offset) -->
+
+    <!-- LEFT LEG of μ -->
+    <!-- Front face -->
+    <path d="M 42 45 L 42 135 Q 42 150 57 150 L 65 150 L 65 135 Q 65 128 57 128 L 57 128 Q 55 128 55 125 L 55 45 Z"
+          fill="url(#frontFace)"/>
+    <!-- Top face -->
+    <path d="M 42 45 L 54 35 L 67 35 L 55 45 Z" fill="url(#topFace)"/>
+    <!-- Right side face -->
+    <path d="M 55 45 L 67 35 L 67 125 Q 67 128 65 128 L 65 135 Q 65 150 57 150 L 65 150 L 77 140 L 77 128 Q 77 120 67 125 L 67 35"
+          fill="url(#sideFace)" opacity="0.7"/>
+
+    <!-- BOTTOM CURVE of μ (connecting left to right) -->
+    <!-- Front face -->
+    <path d="M 55 125 Q 55 150 80 150 Q 105 150 105 125"
+          fill="none" stroke="url(#frontFace)" stroke-width="13" stroke-linecap="butt"/>
+    <!-- Top highlight of curve -->
+    <path d="M 55 119 Q 55 144 80 144 Q 105 144 105 119"
+          fill="none" stroke="url(#topFace)" stroke-width="3" stroke-linecap="butt" opacity="0.5"/>
+
+    <!-- RIGHT LEG of μ -->
+    <!-- Front face -->
+    <path d="M 105 45 L 105 125 Q 105 128 107 128 L 115 128 Q 118 128 118 125 L 118 45 Z"
+          fill="url(#frontFace)"/>
+    <!-- Top face -->
+    <path d="M 105 45 L 117 35 L 130 35 L 118 45 Z" fill="url(#topFace)"/>
+    <!-- Right side -->
+    <path d="M 118 45 L 130 35 L 130 125 L 118 125 Z" fill="url(#sideFace)" opacity="0.7"/>
+
+    <!-- DESCENDER TAIL -->
+    <!-- Front face -->
+    <path d="M 118 125 L 118 165 Q 118 172 125 172 L 145 172 L 145 160 L 131 160 Q 131 160 131 158 L 131 125 Z"
+          fill="url(#frontFace)"/>
+    <!-- Top of horizontal part -->
+    <path d="M 118 125 L 130 115 L 143 115 L 131 125 Z" fill="url(#topFace)" opacity="0.6"/>
+    <!-- Right side of tail end -->
+    <path d="M 145 160 L 157 150 L 157 162 L 145 172 Z" fill="url(#sideFace)" opacity="0.7"/>
+    <!-- Top of tail end -->
+    <path d="M 131 160 L 143 150 L 157 150 L 145 160 Z" fill="url(#topFace)" opacity="0.4"/>
+  </g>
+
+  <!-- Subtle reflection below -->
+  <g opacity="0.06" transform="translate(0,20) scale(1,-0.15)">
+    <path d="M 42 45 L 42 135 Q 42 150 57 150 L 65 150 L 65 135 L 55 125 L 55 45 Z" fill="#22c55e"/>
+    <path d="M 105 45 L 105 125 L 118 125 L 118 45 Z" fill="#22c55e"/>
+  </g>
+</svg>

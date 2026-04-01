@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#4ade80"/>
+    </linearGradient>
+    <linearGradient id="traceGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="traceGradV" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.1"/>
+    </linearGradient>
+    <filter id="circuitGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="24" fill="#0f1117"/>
+
+  <!-- Circuit traces - left side -->
+  <path d="M 0 60 H 30 L 45 75" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 0 90 H 40 L 50 100" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 0 130 H 35 L 48 118" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Circuit traces - right side -->
+  <path d="M 200 70 H 170 L 155 82" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.6" transform="scale(-1,1) translate(-200,0)"/>
+  <path d="M 200 100 H 165 L 152 108" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.5" transform="scale(-1,1) translate(-200,0)"/>
+  <path d="M 200 140 H 168 L 155 128" stroke="url(#traceGrad)" stroke-width="1.5" fill="none" opacity="0.4" transform="scale(-1,1) translate(-200,0)"/>
+
+  <!-- Circuit traces - top -->
+  <path d="M 80 0 V 25 L 90 40" stroke="url(#traceGradV)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 120 0 V 28 L 112 42" stroke="url(#traceGradV)" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Circuit traces - bottom -->
+  <path d="M 75 200 V 175 L 85 160" stroke="url(#traceGradV)" stroke-width="1.5" fill="none" opacity="0.5" transform="scale(1,-1) translate(0,-200)"/>
+  <path d="M 125 200 V 178 L 115 162" stroke="url(#traceGradV)" stroke-width="1.5" fill="none" opacity="0.4" transform="scale(1,-1) translate(0,-200)"/>
+
+  <!-- Circuit nodes (dots at trace endpoints near μ) -->
+  <circle cx="45" cy="75" r="2.5" fill="#22c55e" opacity="0.7"/>
+  <circle cx="50" cy="100" r="2.5" fill="#22c55e" opacity="0.6"/>
+  <circle cx="48" cy="118" r="2.5" fill="#22c55e" opacity="0.5"/>
+  <circle cx="155" cy="82" r="2.5" fill="#22c55e" opacity="0.7"/>
+  <circle cx="152" cy="108" r="2.5" fill="#22c55e" opacity="0.6"/>
+  <circle cx="155" cy="128" r="2.5" fill="#22c55e" opacity="0.5"/>
+  <circle cx="90" cy="40" r="2.5" fill="#22c55e" opacity="0.6"/>
+  <circle cx="112" cy="42" r="2.5" fill="#22c55e" opacity="0.5"/>
+  <circle cx="85" cy="160" r="2.5" fill="#22c55e" opacity="0.6"/>
+  <circle cx="115" cy="162" r="2.5" fill="#22c55e" opacity="0.5"/>
+
+  <!-- Outer ring -->
+  <circle cx="100" cy="100" r="52" fill="none" stroke="#22c55e" stroke-width="1" opacity="0.2"/>
+
+  <!-- Inner hexagonal frame -->
+  <polygon points="100,45 145,72.5 145,127.5 100,155 55,127.5 55,72.5"
+           fill="none" stroke="#22c55e" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Central μ -->
+  <text x="100" y="128" font-family="Georgia, 'Times New Roman', serif" font-size="80" font-weight="bold"
+        fill="url(#greenGrad)" text-anchor="middle" filter="url(#circuitGlow)">μ</text>
+</svg>

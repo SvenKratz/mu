@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <radialGradient id="pulseRadial" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.15"/>
+      <stop offset="60%" stop-color="#22c55e" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="pulseGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="wideGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="24" fill="#060810"/>
+
+  <!-- Radial pulse from center -->
+  <circle cx="100" cy="100" r="95" fill="url(#pulseRadial)"/>
+
+  <!-- Concentric pulse rings -->
+  <circle cx="100" cy="100" r="85" fill="none" stroke="#22c55e" stroke-width="0.5" opacity="0.08"/>
+  <circle cx="100" cy="100" r="70" fill="none" stroke="#22c55e" stroke-width="0.5" opacity="0.12"/>
+  <circle cx="100" cy="100" r="55" fill="none" stroke="#22c55e" stroke-width="0.8" opacity="0.15"/>
+
+  <!-- Data flow lines - horizontal signals -->
+  <g stroke="#22c55e" stroke-width="1" fill="none" opacity="0.4" filter="url(#pulseGlow)">
+    <!-- Left input signal (square wave) -->
+    <polyline points="5,70 15,70 15,60 25,60 25,70 35,70 35,60 45,60 45,70 55,70"/>
+    <!-- Right output signal -->
+    <polyline points="145,70 155,70 155,62 165,62 165,70 175,70 175,62 185,62 185,70 195,70"/>
+    <!-- Left lower signal (sine-ish) -->
+    <path d="M 5,130 Q 15,120 25,130 Q 35,140 45,130 Q 55,120 60,130"/>
+    <!-- Right lower signal -->
+    <path d="M 140,130 Q 150,118 160,130 Q 170,142 180,130 Q 190,118 195,130"/>
+  </g>
+
+  <!-- Connecting traces from signals to mu -->
+  <g stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.25">
+    <path d="M 55 70 H 62"/>
+    <path d="M 138 70 H 145"/>
+    <path d="M 60 130 H 65"/>
+    <path d="M 135 130 H 140"/>
+  </g>
+
+  <!-- Data flow dots traveling along traces -->
+  <g fill="#4ade80" filter="url(#pulseGlow)">
+    <circle cx="35" cy="60" r="2" opacity="0.8"/>
+    <circle cx="165" cy="62" r="2" opacity="0.8"/>
+    <circle cx="25" cy="130" r="2" opacity="0.6"/>
+    <circle cx="170" cy="130" r="2" opacity="0.6"/>
+  </g>
+
+  <!-- Vertical data flows top/bottom -->
+  <g stroke="#22c55e" stroke-width="1" fill="none" opacity="0.3">
+    <!-- Top input -->
+    <polyline points="80,5 80,15 90,15 90,25 80,25 80,35 90,35 90,45"/>
+    <polyline points="110,5 120,5 120,15 110,15 110,25 120,25 120,35"/>
+    <!-- Bottom output -->
+    <polyline points="85,160 85,170 95,170 95,180 85,180 85,190"/>
+    <polyline points="115,160 115,168 125,168 125,178 115,178 115,190"/>
+  </g>
+
+  <!-- Central processor frame -->
+  <rect x="60" y="48" width="80" height="104" rx="6" fill="none" stroke="#22c55e" stroke-width="1" opacity="0.2"/>
+
+  <!-- The mu character - large and clear -->
+  <text x="100" y="128" font-family="Georgia, 'Times New Roman', serif" font-size="80" font-weight="bold"
+        fill="url(#pulseGrad)" text-anchor="middle" filter="url(#wideGlow)">&#x03BC;</text>
+
+  <!-- Processing indicator dots under mu -->
+  <g fill="#22c55e" opacity="0.5">
+    <circle cx="82" cy="145" r="2"/>
+    <circle cx="93" cy="145" r="2.5"/>
+    <circle cx="104" cy="145" r="2"/>
+    <circle cx="115" cy="145" r="2.5"/>
+  </g>
+</svg>

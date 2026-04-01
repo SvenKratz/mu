@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="blur" in2="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="200" height="200" rx="32" fill="#0f1117"/>
+
+  <!-- Terminal window frame -->
+  <rect x="20" y="20" width="160" height="160" rx="16" fill="#1a1d27" stroke="#2e3347" stroke-width="1.5"/>
+
+  <!-- Terminal title bar -->
+  <rect x="20" y="20" width="160" height="28" rx="16" fill="#232733"/>
+  <rect x="20" y="36" width="160" height="12" fill="#232733"/>
+
+  <!-- Traffic light dots -->
+  <circle cx="38" cy="34" r="4" fill="#ef4444" opacity="0.8"/>
+  <circle cx="52" cy="34" r="4" fill="#eab308" opacity="0.8"/>
+  <circle cx="66" cy="34" r="4" fill="#22c55e" opacity="0.8"/>
+
+  <!-- Subtle scan line effect -->
+  <line x1="20" y1="48" x2="180" y2="48" stroke="#2e3347" stroke-width="0.5"/>
+
+  <!-- Cursor blink line -->
+  <rect x="36" y="62" width="8" height="2" rx="1" fill="#22c55e" opacity="0.4"/>
+
+  <!-- Green μ symbol -->
+  <text x="100" y="138" font-family="Georgia, 'Times New Roman', serif" font-size="90" font-weight="bold"
+        fill="#22c55e" text-anchor="middle" filter="url(#glow)">μ</text>
+
+  <!-- Subtle green reflection at bottom -->
+  <ellipse cx="100" cy="168" rx="40" ry="4" fill="#22c55e" opacity="0.1" filter="url(#softGlow)"/>
+</svg>
